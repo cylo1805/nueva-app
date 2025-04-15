@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Historia Clínica Estética</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #fefefe; margin: 0; padding: 0; }
+    header { background: #a87cc2; color: white; padding: 1rem; text-align: center; }
+    main { padding: 1rem; max-width: 960px; margin: auto; }
+    label { display: block; margin: 10px 0; }
+    textarea, input, select, canvas { width: 100%; max-width: 100%; }
+    button { margin-top: 10px; margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <header><h1>Historia Clínica Estética</h1></header>
+  <main>
+    <section id="datosPaciente">
+      <form id="formularioPaciente">
+        <h2>Datos Generales</h2>
+        <label>Nombre: <input type="text" name="nombres" required></label>
+        <label>Apellidos: <input type="text" name="apellidos" required></label>
+        <label>Edad: <input type="number" name="edad"></label>
+        <label>Sexo: 
+          <select name="sexo">
+            <option value="">Seleccione</option>
+            <option value="Femenino">Femenino</option>
+            <option value="Masculino">Masculino</option>
+          </select>
+        </label>
+        <label>Teléfono: <input type="tel" name="telefono"></label>
+        <label>Fecha de Consulta: <input type="date" name="fechaConsulta"></label>
+
+        <h3>Historia Clínica</h3>
+        <label>Enfermedades sufridas: <textarea name="enfermedadesSufridas"></textarea></label>
+        <label>Problemas de presión, alergias, convulsiones: <textarea name="presionAlergias"></textarea></label>
+        <label>Tratamientos previos / complicaciones: <textarea name="tratamientosComplicaciones"></textarea></label>
+        <label>Hábitos alimenticios / hidratación / vitaminas: <textarea name="habitos"></textarea></label>
+
+        <button type="button" onclick="mostrarConsentimiento()">Continuar</button>
+        <button type="button" onclick="verHistorial()">Ver Historial</button>
+        <button type="button" onclick="resetFormulario()">Nuevo Paciente</button>
+      </form>
+    </section>
+
+    <section id="seccionConsentimiento" style="display:none;">
+      <h2>Consentimiento y Firma</h2>
+      <label>Servicio:
+        <select id="servicio" onchange="cargarTextoServicio()">
+          <option value="">Seleccione un servicio</option>
+        </select>
+      </label>
+      <label>Texto del consentimiento:
+        <textarea id="textoConsentimiento" rows="12"></textarea>
+      </label>
+      <label>Firma del paciente:</label>
+      <canvas id="firmaCanvas" width="300" height="100" style="border:1px solid black;"></canvas>
+      <div>
+        <button onclick="guardarFormulario()">Guardar</button>
+        <button onclick="generarPDF()">Generar PDF</button>
+      </div>
+
+      <h3>Agregar nuevo servicio</h3>
+      <form onsubmit="agregarNuevoServicio(event)">
+        <label>Nombre del servicio: <input type="text" id="nuevoServicio" required></label>
+        <label>Texto del consentimiento: <textarea id="nuevoTexto" rows="6" required></textarea></label>
+        <button type="submit">Agregar</button>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "TU_API_KEY",
+      authDomain: "TU_DOMINIO.firebaseapp.com",
+      projectId: "TU_PROJECT_ID",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: ""
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const canvas = document.getElementById("firmaCanvas");
+    const ctx = canvas.getContext("2d");
+    let dibujando = false;
+    canvas.onmousedown = () => dibujando = true;
+    canvas.onmouseup = () => { dibujando = false; ctx.beginPath(); };
+    canvas.onmousemove = e => {
+      if (!dibujando) return;
+      const rect = canvas.getBoundingClientRect();
+      ctx.lineWidth = 2; ctx.lineCap = "round";
+      ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    };
+
+    function mostrarConsentimiento() {
+      document.getElementById("datosPaciente").style.display = "none";
+      document.getElementById("seccionConsentimiento").style.display = "block";
+    }
+
+    function resetFormulario() {
+      document.getElementById("formularioPaciente").reset();
+      document.getElementById("textoConsentimiento").value = "";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function agregarNuevoServicio(e) {
+      e.preventDefault();
+      const nombre = document.getElementById("nuevoServicio").value;
+      const texto = document.getElementById("nuevoTexto").value;
+      db.collection("servicios").doc(nombre).set({ consentimiento: texto });
+      const opt = document.createElement("option");
+      opt.value = nombre; opt.text = nombre;
+      document.getElementById("servicio").appendChild(opt);
+      Toastify({ text: "Servicio agregado.", duration: 3000, backgroundColor: "#4caf50" }).showToast();
+    }
+
+    function cargarTextoServicio() {
+      const servicio = document.getElementById("servicio").value;
+      db.collection("servicios").doc(servicio).get().then(doc => {
+        if (doc.exists) document.getElementById("textoConsentimiento").value = doc.data().consentimiento;
+      });
+    }
+
+    function guardarFormulario() {
+      const data = Object.fromEntries(new FormData(document.getElementById("formularioPaciente")).entries());
+      data.servicio = document.getElementById("servicio").value;
+      data.consentimiento = document.getElementById("textoConsentimiento").value;
+      data.firma = canvas.toDataURL();
+      db.collection("pacientes").add(data).then(() => {
+        Toastify({ text: "Guardado exitosamente.", duration: 3000, backgroundColor: "#4caf50" }).showToast();
+      });
+    }
+
+    function verHistorial() {
+      const nombre = document.querySelector("[name='nombres']").value.toLowerCase();
+      const apellido = document.querySelector("[name='apellidos']").value.toLowerCase();
+      db.collection("pacientes").get().then(snapshot => {
+        const pacientes = snapshot.docs.map(d => d.data());
+        const encontrado = pacientes.find(p => `${p.nombres} ${p.apellidos}`.toLowerCase().includes(`${nombre} ${apellido}`));
+        if (encontrado) alert("Historial encontrado:\n" + JSON.stringify(encontrado, null, 2));
+        else Toastify({ text: "No se encontró historial.", duration: 3000, backgroundColor: "#f44336" }).showToast();
+      });
+    }
+
+    function generarPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const nombre = document.querySelector("[name='nombres']").value;
+      const apellido = document.querySelector("[name='apellidos']").value;
+      const consentimiento = document.getElementById("textoConsentimiento").value;
+      const firma = canvas.toDataURL();
+      doc.text(`Consentimiento\nPaciente: ${nombre} ${apellido}`, 10, 10);
+      doc.text(doc.splitTextToSize(consentimiento, 180), 10, 30);
+      doc.addImage(firma, 'PNG', 10, 260, 60, 20);
+      doc.save(`consentimiento_${nombre}_${apellido}.pdf`);
+    }
+  </script>
+</body>
+</html>
